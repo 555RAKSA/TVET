@@ -15,19 +15,21 @@ import { parseGCode, PLCResult } from './lib/gcode-logic';
 export default function App() {
   const [gcode, setGcode] = useState('G1 X10 Z0\nG1 X20 Z-10\nG1 X40 Z-10\nG1 X50 Z-20');
   const [noseRadius, setNoseRadius] = useState(0.4);
+  const [nrr, setNrr] = useState(0.8);
   const [ra, setRa] = useState(0.2);
-  const [fa, setFa] = useState(0.1);
+  const [fa, setFa] = useState(0.2);
   const [useCommonPoint, setUseCommonPoint] = useState(true);
 
   // New Cutting Parameters
   const [tnr, setTnr] = useState('0101');
-  const [vc, setVc] = useState(200);
+  const [vc, setVc] = useState(250);
   const [std, setStd] = useState(50);
+  const [lastCalculatedMaxX, setLastCalculatedMaxX] = useState(0);
   const [zal, setZal] = useState(0.1);
   const [doc, setDoc] = useState(2);
   const [feedr, setFeedr] = useState(0.25);
   const [tnf, setTnf] = useState('0202');
-  const [vcf, setVcf] = useState(250);
+  const [vcf, setVcf] = useState(210);
   const [feedf, setFeedf] = useState(0.15);
 
   const [showPlcStack, setShowPlcStack] = useState(false);
@@ -38,8 +40,23 @@ export default function App() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    // Calculate Max X from input
+    const xMatches = gcode.match(/X([\d.-]+)/gi);
+    if (xMatches) {
+      const xValues = xMatches.map(m => parseFloat(m.slice(1)));
+      const newMaxX = Math.max(...xValues, 0);
+      
+      // If std was matching our last calculation, keep it matched
+      if (std === lastCalculatedMaxX || std === 50) {
+        setStd(newMaxX);
+      }
+      setLastCalculatedMaxX(newMaxX);
+    }
+  }, [gcode]);
+
+  useEffect(() => {
     try {
-      const headerConfig = { tnr, vc, std, zal, doc, feedr, tnf, vcf, feedf };
+      const headerConfig = { tnr, vc, std, zal, doc, feedr, tnf, vcf, feedf, nrr };
       const parsed = parseGCode(gcode, noseRadius, ra, fa, useCommonPoint, headerConfig);
       setResults(parsed.plcRows);
       setRoughGCode(parsed.roughGCode);
@@ -48,7 +65,7 @@ export default function App() {
     } catch (err) {
       console.error(err);
     }
-  }, [gcode, noseRadius, ra, fa, useCommonPoint, tnr, vc, std, zal, doc, feedr, tnf, vcf, feedf]);
+  }, [gcode, noseRadius, nrr, ra, fa, useCommonPoint, tnr, vc, std, zal, doc, feedr, tnf, vcf, feedf]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -73,7 +90,15 @@ export default function App() {
         
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[9px] uppercase tracking-widest text-[#71717A]">_NR</span>
+            <span className="text-[9px] uppercase tracking-widest text-[#71717A]">_NRR (Rough)</span>
+            <input 
+              type="number" step="0.001" value={nrr}
+              onChange={(e) => setNrr(parseFloat(e.target.value) || 0)}
+              className="bg-transparent text-[#00F5FF]/80 font-mono text-right w-14 focus:outline-none text-xs"
+            />
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-[9px] uppercase tracking-widest text-[#71717A]">_NR (Finish)</span>
             <input 
               type="number" step="0.001" value={noseRadius}
               onChange={(e) => setNoseRadius(parseFloat(e.target.value) || 0)}
@@ -98,8 +123,8 @@ export default function App() {
           </div>
           <div className="h-6 w-[1px] bg-[#27272A]" />
           <div className="flex flex-col items-end">
-            <span className="text-[9px] uppercase tracking-widest text-[#71717A]">Total Radius</span>
-            <span className="text-xs font-mono text-white">{(noseRadius + ra + fa).toFixed(3)}</span>
+            <span className="text-[9px] uppercase tracking-widest text-[#71717A]">Total Rough</span>
+            <span className="text-xs font-mono text-white">{(nrr + ra + fa).toFixed(3)}</span>
           </div>
           <div className="h-6 w-[1px] bg-[#27272A]" />
           <button 
@@ -184,7 +209,12 @@ export default function App() {
                 <div className="space-y-1">
                   <label className="text-[9px] text-[#A1A1AA] uppercase flex justify-between">
                     <span>_STD: Stock Diameter</span>
-                    <span className="text-white font-mono">{std}</span>
+                    <button 
+                      onClick={() => setStd(lastCalculatedMaxX)}
+                      className="text-[#00F5FF]/60 hover:text-[#00F5FF] text-[8px] border border-[#00F5FF]/30 px-1 rounded transition-colors"
+                    >
+                      SYNC MAX X ({lastCalculatedMaxX})
+                    </button>
                   </label>
                   <input type="number" className="w-full bg-[#18181B] border border-[#27272A] px-2 py-1.5 text-white font-mono text-[11px] focus:outline-none focus:border-[#00F5FF]" value={std} onChange={e => setStd(parseFloat(e.target.value) || 0)} />
                 </div>

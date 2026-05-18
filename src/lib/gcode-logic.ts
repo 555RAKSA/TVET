@@ -63,9 +63,10 @@ export interface HeaderConfig {
   tnf: string;
   vcf: number;
   feedf: number;
+  nrr: number; // Nose Radius Rough
 }
 
-function calculatePass(inputLines: string[], targetNR: number, useLineNumbers: boolean, startN: number = 10, collectVars: boolean = false, useCommonPoint: boolean = false): { calBlocks: string[], plcResults: PLCResult[], lastN: number } {
+function calculatePass(inputLines: string[], targetNR: number, useLineNumbers: boolean, startN: number = 10, collectVars: boolean = false, useCommonPoint: boolean = false, toolNR: number = 0): { calBlocks: string[], plcResults: PLCResult[], lastN: number } {
   const calBlocks: string[] = [];
   const plcResults: PLCResult[] = [];
   let nCounter = startN;
@@ -87,8 +88,9 @@ function calculatePass(inputLines: string[], targetNR: number, useLineNumbers: b
     let outX = x;
     let outZ = z;
     if (useCommonPoint) {
-      outX = x - 2 * targetNR;
-      outZ = z - targetNR;
+      // Use the actual tool nose radius for the "Common Point" corner offset
+      outX = x - 2 * toolNR;
+      outZ = z - toolNR;
     }
     const rPart = r !== undefined ? ` R${r.toFixed(4)}` : '';
     return `${g} X${outX.toFixed(4)} Z${outZ.toFixed(4)}${rPart}`;
@@ -261,8 +263,9 @@ export function parseGCode(input: string, noseRadius: number, ra: number = 0, fa
   const inputLines = input.split('\n').filter(l => l.trim() !== '');
   
   // ROUGH CUTTING Section
-  const roughNR = noseRadius + ra + fa;
-  const { calBlocks: roughBlocks, plcResults, lastN: endCount } = calculatePass(inputLines, roughNR, true, 10, true, useCommonPoint);
+  const nrr = header ? header.nrr : 0.8;
+  const roughNR = nrr + ra + fa;
+  const { calBlocks: roughBlocks, plcResults, lastN: endCount } = calculatePass(inputLines, roughNR, true, 10, true, useCommonPoint, nrr);
   
   const headerLines: string[] = [];
   if (header) {
@@ -271,15 +274,15 @@ export function parseGCode(input: string, noseRadius: number, ra: number = 0, fa
       `T${header.tnr}`,
       "G18 G99",
       `G96 S${header.vc} M03 M8`,
-      `G0 X${(header.std + header.doc / 2).toFixed(3)} Z${(header.zal + 1).toFixed(3)}`,
+      `G0 X${(header.std + header.doc * 2).toFixed(3)} Z${(header.zal + 1).toFixed(3)}`,
       `G71 U${header.doc.toFixed(3)} R1`,
       `G71 P10 Q${endCount} F${header.feedr.toFixed(3)}`
     );
   }
 
   // ROUGH-FINISH Section
-  const finishNR = noseRadius + fa;
-  const { calBlocks: finishBlocks } = calculatePass(inputLines, finishNR, false, 0, false, useCommonPoint);
+  const finishRoughNR = nrr + fa;
+  const { calBlocks: finishBlocks } = calculatePass(inputLines, finishRoughNR, false, 0, false, useCommonPoint, nrr);
 
   let finishSetup: string[] = [];
   if (header && finishBlocks.length > 0) {
@@ -308,7 +311,7 @@ export function parseGCode(input: string, noseRadius: number, ra: number = 0, fa
   }
 
   // FINISH CONTOUR Section
-  const { calBlocks: contourBlocks } = calculatePass(inputLines, noseRadius, false, 0, false, useCommonPoint);
+  const { calBlocks: contourBlocks } = calculatePass(inputLines, noseRadius, false, 0, false, useCommonPoint, noseRadius);
   let contourSetup: string[] = [];
   if (header && contourBlocks.length > 0) {
     const firstLine = contourBlocks[0];
