@@ -1,0 +1,6 @@
+{
+  "name": "G-Code PLC Calculator",
+  "description": "Calculates tool nose radius compensation and PLC variables from G-code contours.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
